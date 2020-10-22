@@ -245,7 +245,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
         augmentation = [
             transforms.ToPILImage(),
-            transforms.RandomResizedCrop(256, scale=(0.2, 1.)),
+            transforms.RandomResizedCrop(128, scale=(0.2, 1.)),
             transforms.RandomApply([
                 transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
             ], p=0.8),
@@ -259,7 +259,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # MoCo v1's aug: same as InstDisc https://arxiv.org/abs/1805.01978
         augmentation = [
             transforms.ToPILImage(),
-            transforms.RandomResizedCrop(256, scale=(0.2, 1.)),
+            transforms.RandomResizedCrop(128, scale=(0.2, 1.)),
             transforms.RandomGrayscale(p=0.2),
             transforms.ColorJitter(0.4, 0.4, 0.4, 0.4),
             transforms.RandomHorizontalFlip(),
@@ -271,7 +271,7 @@ def main_worker(gpu, ngpus_per_node, args):
     eval_augmentation = transforms.Compose([
         transforms.ToPILImage(),
         transforms.Resize(256),
-        transforms.CenterCrop(256),
+        transforms.CenterCrop(128),
         transforms.ToTensor(),
         normalize
     ])
@@ -408,7 +408,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, cluster_result
             
     if not args.multiprocessing_distributed or (args.multiprocessing_distributed
         and args.rank % 2 == 0):
-        print("Logging to TB....", global_step+i)
+        print("Logging to TB....")
         tb_logger.add_scalar('Train Acc Inst', acc_inst.avg, epoch)
         tb_logger.add_scalar('Train Acc Prototype', acc_proto.avg, epoch)
         tb_logger.add_scalar('Train Total Loss', losses.avg, epoch)
