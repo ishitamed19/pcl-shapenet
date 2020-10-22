@@ -10,6 +10,8 @@ from tqdm import tqdm
 import numpy as np
 import faiss
 
+from tensorboardX import SummaryWriter
+
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -25,6 +27,7 @@ import torchvision.models as models
 
 import pcl.loader
 import pcl.builder
+from pcl.shapenet_dataset import create_shapenet_dataset
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -44,7 +47,7 @@ parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=16, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -80,9 +83,9 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
 
-parser.add_argument('--low-dim', default=128, type=int,
+parser.add_argument('--low-dim', default=16, type=int,
                     help='feature dimension (default: 128)')
-parser.add_argument('--pcl-r', default=16384, type=int,
+parser.add_argument('--pcl-r', default=1024, type=int,
                     help='queue size; number of negative pairs; needs to be smaller than num_cluster (default: 16384)')
 parser.add_argument('--moco-m', default=0.999, type=float,
                     help='moco momentum of updating key encoder (default: 0.999)')
@@ -96,12 +99,18 @@ parser.add_argument('--aug-plus', action='store_true',
 parser.add_argument('--cos', action='store_true',
                     help='use cosine lr schedule')
 
-parser.add_argument('--num-cluster', default='25000,50000,100000', type=str, 
+parser.add_argument('--num-cluster', default='2500,5000,10000', type=str, 
                     help='number of clusters')
-parser.add_argument('--warmup-epoch', default=20, type=int,
+parser.add_argument('--warmup-epoch', default=10, type=int,
                     help='number of warm-up epochs to only train with InfoNCE loss')
 parser.add_argument('--exp-dir', default='experiment_pcl', type=str,
                     help='experiment directory')
+
+def setup_tb(exp_name):
+    tb_directory = os.path.join('/home/mprabhud/ishita/other/pcl-shapenet/tb_logs', exp_name)
+    if not os.path.exists(tb_directory):
+        os.makedirs(tb_directory)
+    return SummaryWriter(tb_directory)
 
 def main():
     args = parser.parse_args()
@@ -148,6 +157,8 @@ def main_worker(gpu, ngpus_per_node, args):
     
     if args.gpu is not None:
         print("Use GPU: {} for training".format(args.gpu))
+        
+    tb_logger = setup_tb(args.exp_dir)
 
     # suppress printing if not master    
     if args.multiprocessing_distributed and args.gpu != 0:
@@ -263,12 +274,13 @@ def main_worker(gpu, ngpus_per_node, args):
         normalize
         ])    
        
-    train_dataset = pcl.loader.ImageFolderInstance(
-        traindir,
-        pcl.loader.TwoCropsTransform(transforms.Compose(augmentation)))
-    eval_dataset = pcl.loader.ImageFolderInstance(
-        traindir,
-        eval_augmentation)
+#     train_dataset = pcl.loader.ImageFolderInstance(
+#         traindir,
+#         pcl.loader.TwoCropsTransform(transforms.Compose(augmentation)))
+#     eval_dataset = pcl.loader.ImageFolderInstance(
+#         traindir,
+#         eval_augmentation)
+    train_dataset, eval_dataset = create_shapenet_dataset(args)
     
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -318,7 +330,7 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args, cluster_result)
+        train(train_loader, model, criterion, optimizer, epoch, args, cluster_result, tb_logger)
 
         if (epoch+1)%5==0 and (not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0)):
@@ -327,10 +339,10 @@ def main_worker(gpu, ngpus_per_node, args):
                 'arch': args.arch,
                 'state_dict': model.state_dict(),
                 'optimizer' : optimizer.state_dict(),
-            }, is_best=False, filename='{}/checkpoint_{:04d}.pth.tar'.format(args.exp_dir,epoch))
+            }, is_best=False, filename='{}/checkpoint.pth.tar'.format(args.exp_dir))
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args, cluster_result=None):
+def train(train_loader, model, criterion, optimizer, epoch, args, cluster_result=None, tb_logger=None):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -387,6 +399,13 @@ def train(train_loader, model, criterion, optimizer, epoch, args, cluster_result
 
         if i % args.print_freq == 0:
             progress.display(i)
+            
+    if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+        and args.rank % 2 == 0):
+        print("Logging to TB....", global_step+i)
+        tb_logger.add_scalar('Train Acc Inst', acc_inst.avg, epoch)
+        tb_logger.add_scalar('Train Acc Prototype', acc_proto.avg, epoch)
+        tb_logger.add_scalar('Train Total Loss', losses.avg, epoch)
 
             
 def compute_features(eval_loader, model, args):
