@@ -15,6 +15,9 @@ import torch.utils.data as data
 from torchvision.transforms import Resize
 
 
+# import ipdb
+# st = ipdb.set_trace
+
 class ShapeNet(data.Dataset):
     """Dataset wrapping images and target meshes for ShapeNet dataset.
     Arguments:
@@ -36,7 +39,8 @@ class ShapeNet(data.Dataset):
 
 
     def __getitem__(self, index):
-
+        
+        #st()
         name = os.path.join(self.file_root, self.file_names[index])
         file_name, view_num = name.split('-')
         data = pickle.load(open(file_name, "rb"))
@@ -107,6 +111,7 @@ def create_shapenet_dataset(args):
     if args.aug_plus:
         # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
         augmentation = [
+            transforms.ToPILImage(),
             transforms.RandomResizedCrop(256, scale=(0.2, 1.)),
             transforms.RandomApply([
                 transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
@@ -120,6 +125,7 @@ def create_shapenet_dataset(args):
     else:
         # MoCo v1's aug: same as InstDisc https://arxiv.org/abs/1805.01978
         augmentation = [
+            transforms.ToPILImage(),
             transforms.RandomResizedCrop(256, scale=(0.2, 1.)),
             transforms.RandomGrayscale(p=0.2),
             transforms.ColorJitter(0.4, 0.4, 0.4, 0.4),
@@ -130,6 +136,7 @@ def create_shapenet_dataset(args):
 
     # center-crop augmentation
     eval_augmentation = transforms.Compose([
+        transforms.ToPILImage(),
         transforms.Resize(256),
         transforms.CenterCrop(256),
         transforms.ToTensor(),

@@ -107,9 +107,7 @@ parser.add_argument('--exp-dir', default='experiment_pcl', type=str,
                     help='experiment directory')
 
 def setup_tb(exp_name):
-    tb_directory = os.path.join('/home/mprabhud/ishita/other/pcl-shapenet/tb_logs', exp_name)
-    if not os.path.exists(tb_directory):
-        os.makedirs(tb_directory)
+    tb_directory = os.path.join('/home/mprabhud/ishita/pcl-shapenet/tb_logs', exp_name)
     return SummaryWriter(tb_directory)
 
 def main():
@@ -138,6 +136,7 @@ def main():
     
     if not os.path.exists(args.exp_dir):
         os.mkdir(args.exp_dir)
+        os.mkdir(os.path.join('/home/mprabhud/ishita/pcl-shapenet/tb_logs', args.exp_dir))
     
     ngpus_per_node = torch.cuda.device_count()
     if args.multiprocessing_distributed:
@@ -238,14 +237,15 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # Data loading code
-    traindir = os.path.join(args.data, 'train')
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-    
+    traindir = os.path.join(args.data)
+    normalize = transforms.Normalize(mean=[0.4913997551666284, 0.48215855929893703, 0.4465309133731618],
+                                     std=[0.24703225141799082, 0.24348516474564, 0.26158783926049628])
+
     if args.aug_plus:
         # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
         augmentation = [
-            transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
+            transforms.ToPILImage(),
+            transforms.RandomResizedCrop(256, scale=(0.2, 1.)),
             transforms.RandomApply([
                 transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
             ], p=0.8),
@@ -258,29 +258,34 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         # MoCo v1's aug: same as InstDisc https://arxiv.org/abs/1805.01978
         augmentation = [
-            transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
+            transforms.ToPILImage(),
+            transforms.RandomResizedCrop(256, scale=(0.2, 1.)),
             transforms.RandomGrayscale(p=0.2),
             transforms.ColorJitter(0.4, 0.4, 0.4, 0.4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize
         ]
-        
-    # center-crop augmentation 
+
+    # center-crop augmentation
     eval_augmentation = transforms.Compose([
+        transforms.ToPILImage(),
         transforms.Resize(256),
-        transforms.CenterCrop(224),
+        transforms.CenterCrop(256),
         transforms.ToTensor(),
         normalize
-        ])    
+    ])
        
-#     train_dataset = pcl.loader.ImageFolderInstance(
-#         traindir,
-#         pcl.loader.TwoCropsTransform(transforms.Compose(augmentation)))
-#     eval_dataset = pcl.loader.ImageFolderInstance(
-#         traindir,
-#         eval_augmentation)
-    train_dataset, eval_dataset = create_shapenet_dataset(args)
+    train_dataset = pcl.loader.ShapeNet(
+        traindir,
+        'split_allpt.txt',
+        transform=pcl.loader.TwoCropsTransform(transforms.Compose(augmentation)))
+    eval_dataset = pcl.loader.ShapeNet(
+        traindir,
+        'split_allpt.txt',
+        transform=eval_augmentation)
+    
+
     
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -365,6 +370,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, cluster_result
         if args.gpu is not None:
             images[0] = images[0].cuda(args.gpu, non_blocking=True)
             images[1] = images[1].cuda(args.gpu, non_blocking=True)
+            
                 
         # compute output
         output, target, output_proto, target_proto = model(im_q=images[0], im_k=images[1], cluster_result=cluster_result, index=index)
