@@ -238,18 +238,18 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # Data loading code
     traindir = os.path.join(args.data)
-    normalize = transforms.Normalize(mean=[0.4913997551666284, 0.48215855929893703, 0.4465309133731618],
-                                     std=[0.24703225141799082, 0.24348516474564, 0.26158783926049628])
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
 
     if args.aug_plus:
         # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
         augmentation = [
             transforms.ToPILImage(),
-            transforms.RandomResizedCrop(128, scale=(0.2, 1.)),
+            #transforms.RandomResizedCrop(128, scale=(0.2, 1.)),
             transforms.RandomApply([
                 transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
             ], p=0.8),
-            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomGrayscale(p=0.1),
             transforms.RandomApply([pcl.loader.GaussianBlur([.1, 2.])], p=0.5),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -259,8 +259,8 @@ def main_worker(gpu, ngpus_per_node, args):
         # MoCo v1's aug: same as InstDisc https://arxiv.org/abs/1805.01978
         augmentation = [
             transforms.ToPILImage(),
-            transforms.RandomResizedCrop(128, scale=(0.2, 1.)),
-            transforms.RandomGrayscale(p=0.2),
+            #transforms.RandomResizedCrop(128, scale=(0.2, 1.)),
+            transforms.RandomGrayscale(p=0.1),
             transforms.ColorJitter(0.4, 0.4, 0.4, 0.4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -270,8 +270,8 @@ def main_worker(gpu, ngpus_per_node, args):
     # center-crop augmentation
     eval_augmentation = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.Resize(256),
-        transforms.CenterCrop(128),
+        #transforms.Resize(256),
+        #transforms.CenterCrop(128),
         transforms.ToTensor(),
         normalize
     ])
@@ -370,6 +370,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args, cluster_result
         if args.gpu is not None:
             images[0] = images[0].cuda(args.gpu, non_blocking=True)
             images[1] = images[1].cuda(args.gpu, non_blocking=True)
+            
+
             
                 
         # compute output

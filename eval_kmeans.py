@@ -2,7 +2,7 @@
 Script to generate embeddings from resnet trained using pcl
 Command to run:
 
-python eval_kmeans.py --pretrained experiment_pcl_crop128_finnetunedorange/checkpoint.pth.tar /home/mprabhud/dataset/shapenet_renders/npys/
+python eval_kmeans.py --pretrained experiment_pcl_resume/checkpoint.pth.tar /home/mprabhud/dataset/shapenet_renders/npys/
 
 '''
 
@@ -97,18 +97,16 @@ def main():
     ########################################################################
     
     traindir = os.path.join(args.data)
-    normalize = transforms.Normalize(mean=[0.4913997551666284, 0.48215855929893703, 0.4465309133731618],
-                                     std=[0.24703225141799082, 0.24348516474564, 0.26158783926049628])
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
     
     train_dataset = pcl.loader.ShapeNet(
         traindir,
         'split_allpt.txt',
         transform=transforms.Compose([
             transforms.ToPILImage(),
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            normalize,
+            normalize
         ]))
 
     train_loader = torch.utils.data.DataLoader(
